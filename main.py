@@ -1,25 +1,21 @@
-# Welcome to
-# __________         __    __  .__                               __
-# \______   \_____ _/  |__/  |_|  |   ____   ______ ____ _____  |  | __ ____
-#  |    |  _/\__  \\   __\   __\  | _/ __ \ /  ___//    \\__  \ |  |/ // __ \
-#  |    |   \ / __ \|  |  |  | |  |_\  ___/ \___ \|   |  \/ __ \|    <\  ___/
-#  |________/(______/__|  |__| |____/\_____>______>___|__(______/__|__\\_____>
-#
-# This file can be a nice home for your Battlesnake logic and helper functions.
-#
-# To get you started we've included code to prevent your Battlesnake from moving backwards.
-# For more info see docs.battlesnake.com
+''' 
+ericpien's notes
+
+useful links: 
+  - https://docs.battlesnake.com
+  - https://docs.battlesnake.com/api/objects/battlesnake
+
+'''
 
 import random
 import typing
+import numpy as np
+import math
 
+snake_name = "Slytherin" # source: https://play.battlesnake.com/u/ericpien/#battlesnakes
 
 # info is called when you create your Battlesnake on play.battlesnake.com
 # and controls your Battlesnake's appearance
-# TIP: If you open your Battlesnake URL in a browser you should see this data
-
-snake_name = "test-20221113" # source: https://play.battlesnake.com/u/ericpien/#battlesnakes
-
 def info() -> typing.Dict:
     print("INFO")
 
@@ -27,21 +23,18 @@ def info() -> typing.Dict:
         "apiversion": "1",
         "author": "ericpien",  # Battlesnake Username
         "color": "#FA4616",    # Choose color
-        "head": "do-sammy",  # Choose head
-        #"head": "tiger-king",  # Choose head
-        "tail": "tiger-tail",  # Choose tail
+        #"head": "do-sammy",  # Choose head
+        "head": "tiger-king",  # Choose head
+        "tail": "nr-booster",  # Choose tail
     }
-
 
 # start is called when your Battlesnake begins a game
 def start(game_state: typing.Dict):
     print("GAME START")
 
-
 # end is called when your Battlesnake finishes a game
 def end(game_state: typing.Dict):
     print("GAME OVER\n")
-
 
 # move is called on every turn and returns your next move
 # Valid moves are "up", "down", "left", or "right"
@@ -59,75 +52,61 @@ def move(game_state: typing.Dict) -> typing.Dict:
     my_head = game_state["you"]["body"][0]  # Coordinates of your head
     my_neck = game_state["you"]["body"][1]  # Coordinates of your "neck"
 
-    if my_neck["x"] < my_head["x"]:  # Neck is left of head, don't move left
+    my_head_left = {"x": my_head["x"]-1, "y": my_head["y"]}
+    my_head_right = {"x": my_head["x"]+1, "y": my_head["y"]}
+    my_head_down = {"x": my_head["x"], "y": my_head["y"]-1}
+    my_head_up = {"x": my_head["x"], "y": my_head["y"]+1}
+
+    if my_neck["x"] < my_head["x"]:
         is_move_safe["left"] = False
 
-    elif my_neck["x"] > my_head["x"]:  # Neck is right of head, don't move right
+    elif my_neck["x"] > my_head["x"]:
         is_move_safe["right"] = False
 
-    elif my_neck["y"] < my_head["y"]:  # Neck is below head, don't move down
+    elif my_neck["y"] < my_head["y"]:
         is_move_safe["down"] = False
 
-    elif my_neck["y"] > my_head["y"]:  # Neck is above head, don't move up
+    elif my_neck["y"] > my_head["y"]:
         is_move_safe["up"] = False
 
-      
     # Prevent Battlesnake from moving out of bounds
     board_width = game_state['board']['width']
     board_height = game_state['board']['height']
 
     if (my_head["x"] == 0):
         is_move_safe["left"] = False
-        print('wall at ' + str(my_head["x"]))
     
     if (my_head["x"] == (board_width - 1)):
         is_move_safe["right"] = False
-        print('wall at ' + str(my_head["x"]))
 
     if (my_head["y"] == 0):
         is_move_safe["down"] = False
-        print('wall at ' + str(my_head["y"]))
     
     if (my_head["y"] == (board_height - 1)):
         is_move_safe["up"] = False
-        print('wall at ' + str(my_head["y"]))
 
-      
     # Prevent Battlesnake from colliding with itself
     my_body = game_state['you']['body'] #array of coords [{"x":0,"y":0},{...}]
     my_body_before_tail = my_body[:-1]
-    # if head[x] - 1 is in body, don't turn left
-    head_temp = my_head.copy()
-    head_temp["x"] -= 1
-    if (head_temp in my_body_before_tail):
+    
+    if (my_head_left in my_body_before_tail):
       is_move_safe["left"] = False
-    # if head[x] + 1 is in body, don't turn right
-    head_temp = my_head.copy()
-    head_temp["x"] += 1
-    if (head_temp in my_body_before_tail):
+    
+    if (my_head_right in my_body_before_tail):
       is_move_safe["right"] = False
-    # if head[y] - 1 is in body, don't turn down
-    head_temp = my_head.copy()
-    head_temp["y"] -= 1
-    if (head_temp in my_body_before_tail):
-      is_move_safe["down"] = False
-    # if head[y] + 1 is in body, don't turn up
-    head_temp = my_head.copy()
-    head_temp["y"] += 1
-    if (head_temp in my_body_before_tail):
-      is_move_safe["up"] = False
 
-      
+    if (my_head_down in my_body_before_tail):
+      is_move_safe["down"] = False
+   
+    if (my_head_up in my_body_before_tail):
+      is_move_safe["up"] = False
+    
     # Prevent Battlesnake from colliding with other Battlesnakes
-    snakes = game_state['board']['snakes']
-    # array of battlesnake objects
-    # https://docs.battlesnake.com/api/objects/battlesnake
+    snakes = game_state['board']['snakes'] #array of snakeobjects [sn, sn, sn, ...]
 
     op_body_before_tail = []
     op_head_next_positions = []
-    if (len(snakes) > 1):
-      print('snakes detected')
-      
+  
     for snake in snakes:
       if (snake["name"] != snake_name):
         op_body_before_tail += snake['body'][:-1]
@@ -138,80 +117,45 @@ def move(game_state: typing.Dict) -> typing.Dict:
         op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y+1}] #go up
         op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y-1}] #go down
 
-    my_head_left = {"x": my_head["x"]-1, "y": my_head["y"]}
-    my_head_right = {"x": my_head["x"]+1, "y": my_head["y"]}
-    my_head_down = {"x": my_head["x"], "y": my_head["y"]-1}
-    my_head_up = {"x": my_head["x"], "y": my_head["y"]+1}
-
     op_next_positions = op_body_before_tail + op_head_next_positions
   
     if (my_head_left in op_next_positions):
       is_move_safe["left"] = False
       print("avoid opponent")
       
-    elif (my_head_right in op_next_positions):
+    if (my_head_right in op_next_positions):
       is_move_safe["right"] = False
       print("avoid opponent")
     
-    elif (my_head_down in op_next_positions):
+    if (my_head_down in op_next_positions):
       is_move_safe["down"] = False
-      print("avoid opponent")
-    elif (my_head_up in op_next_positions):
-      is_move_safe["up"] = False
       print("avoid opponent")
       
-    """
-    # if head[x] - 1 is in body, don't turn left
-    head_temp = my_head.copy()
-    head_temp["x"] -= 1
-    if (head_temp in op_body_before_tail):
-      is_move_safe["left"] = False
-      print('op')
-    # if head[x] + 1 is in body, don't turn right
-    head_temp = my_head.copy()
-    head_temp["x"] += 1
-    if (head_temp in op_body_before_tail):
-      is_move_safe["right"] = False
-      print('op')
-    # if head[y] - 1 is in body, don't turn down
-    head_temp = my_head.copy()
-    head_temp["y"] -= 1
-    if (head_temp in op_body_before_tail):
-      is_move_safe["down"] = False
-      print('op')
-    # if head[y] + 1 is in body, don't turn up
-    head_temp = my_head.copy()
-    head_temp["y"] += 1
-    if (head_temp in op_body_before_tail):
+    if (my_head_up in op_next_positions):
       is_move_safe["up"] = False
-      print('op')
-    
-    # if head[x] + 1 is in op's next moves, don't turn right
-    head_temp = my_head.copy()
-    head_temp["x"] -= 1
-    if (head_temp in op_head):
-      is_move_safe["left"] = False
-      print('op head')
-    # if head[x] + 1 is in op's next moves, don't turn right
-    head_temp = my_head.copy()
-    head_temp["x"] += 1
-    if (head_temp in op_head):
-      is_move_safe["right"] = False
-      print('op head')
-    # if head[y] - 1 is in op's next moves, don't turn down
-    head_temp = my_head.copy()
-    head_temp["y"] -= 1
-    if (head_temp in op_head):
-      is_move_safe["down"] = False
-      print('op head')
-    # if head[y] + 1 is in op's next moves, don't turn up
-    head_temp = my_head.copy()
-    head_temp["y"] += 1
-    if (head_temp in op_head):
-      is_move_safe["up"] = False
-      print('op head') 
-    """
+      print("avoid opponent")
 
+      
+    # Prevent Battlesnake from colliding with hazards
+    hazards = game_state['board']['hazards'] #array of positions [({"x":, "y": }), ...]
+  
+    if (my_head_left in hazards):
+      is_move_safe["left"] = False
+      print("avoid hazard")
+      
+    if (my_head_right in hazards):
+      is_move_safe["right"] = False
+      print("avoid hazard")
+    
+    if (my_head_down in hazards):
+      is_move_safe["down"] = False
+      print("avoid hazard")
+      
+    if (my_head_up in hazards):
+      is_move_safe["up"] = False
+      print("avoid hazard")
+
+    
     # Are there any safe moves left?
     safe_moves = []
 
@@ -226,13 +170,33 @@ def move(game_state: typing.Dict) -> typing.Dict:
     # Choose a random move from the safe ones
     next_move = random.choice(safe_moves)
 
-    # TODO: Step 4 - Move towards food instead of random, to regain health and survive longer
-    # food = game_state['board']['food']
+    # Move towards food
+    food = game_state['board']['food'] #array of (x,y) [{"x":, "y": }]
 
+    if len(food) == 0:
+      next_move = next_move
+    else:
+      food_distances = [euclidean_distance(f,my_head) for f in food]
+      nearest_food_integer = food_distances.index(min(food_distances))
+      nearest_food = food[nearest_food_integer]
+
+      distances = {"left": euclidean_distance(my_head_left, nearest_food),
+                  "right":  euclidean_distance(my_head_right, nearest_food),
+                  "up":  euclidean_distance(my_head_up, nearest_food),
+                  "down": euclidean_distance(my_head_down, nearest_food)}
+      
+      safe_move_distances = [distances[m] for m in safe_moves]
+      best_move_integer = safe_move_distances.index(min(safe_move_distances))
+      best_move = safe_moves[best_move_integer]
+      next_move = best_move
+  
     print(f"MOVE {game_state['turn']}: {next_move}")
     return {"move": next_move}
 
-
+def euclidean_distance(coord1, coord2):
+    n = math.sqrt((coord1["x"]-coord2["x"])**2 + (coord1["y"]-coord2["y"])**2)
+    return n
+  
 # Start server when `python main.py` is run
 if __name__ == "__main__":
     from server import run_server
