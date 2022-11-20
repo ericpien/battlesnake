@@ -17,6 +17,9 @@ import typing
 # info is called when you create your Battlesnake on play.battlesnake.com
 # and controls your Battlesnake's appearance
 # TIP: If you open your Battlesnake URL in a browser you should see this data
+
+snake_name = "test-20221113" # source: https://play.battlesnake.com/u/ericpien/#battlesnakes
+
 def info() -> typing.Dict:
     print("INFO")
 
@@ -24,7 +27,8 @@ def info() -> typing.Dict:
         "apiversion": "1",
         "author": "ericpien",  # Battlesnake Username
         "color": "#FA4616",    # Choose color
-        "head": "tiger-king",  # Choose head
+        "head": "do-sammy",  # Choose head
+        #"head": "tiger-king",  # Choose head
         "tail": "tiger-tail",  # Choose tail
     }
 
@@ -51,7 +55,7 @@ def move(game_state: typing.Dict) -> typing.Dict:
       "right": True
     }
 
-    # We've included code to prevent your Battlesnake from moving backwards
+    # Prevent Battlesnake from moving backwards
     my_head = game_state["you"]["body"][0]  # Coordinates of your head
     my_neck = game_state["you"]["body"][1]  # Coordinates of your "neck"
 
@@ -67,7 +71,8 @@ def move(game_state: typing.Dict) -> typing.Dict:
     elif my_neck["y"] > my_head["y"]:  # Neck is above head, don't move up
         is_move_safe["up"] = False
 
-    # TODO: Step 1 - Prevent your Battlesnake from moving out of bounds
+      
+    # Prevent Battlesnake from moving out of bounds
     board_width = game_state['board']['width']
     board_height = game_state['board']['height']
 
@@ -86,40 +91,130 @@ def move(game_state: typing.Dict) -> typing.Dict:
     if (my_head["y"] == (board_height - 1)):
         is_move_safe["up"] = False
         print('wall at ' + str(my_head["y"]))
-        
-    
-        
-    # TODO: Step 2 - Prevent your Battlesnake from colliding with itself
+
+      
+    # Prevent Battlesnake from colliding with itself
     my_body = game_state['you']['body'] #array of coords [{"x":0,"y":0},{...}]
-    
+    my_body_before_tail = my_body[:-1]
     # if head[x] - 1 is in body, don't turn left
     head_temp = my_head.copy()
     head_temp["x"] -= 1
-    if (head_temp in my_body):
+    if (head_temp in my_body_before_tail):
       is_move_safe["left"] = False
-        
     # if head[x] + 1 is in body, don't turn right
     head_temp = my_head.copy()
     head_temp["x"] += 1
-    if (head_temp in my_body):
+    if (head_temp in my_body_before_tail):
       is_move_safe["right"] = False
     # if head[y] - 1 is in body, don't turn down
     head_temp = my_head.copy()
     head_temp["y"] -= 1
-    if (head_temp in my_body):
+    if (head_temp in my_body_before_tail):
       is_move_safe["down"] = False
-      
     # if head[y] + 1 is in body, don't turn up
     head_temp = my_head.copy()
     head_temp["y"] += 1
-    if (head_temp in my_body):
+    if (head_temp in my_body_before_tail):
       is_move_safe["up"] = False
+
+      
+    # Prevent Battlesnake from colliding with other Battlesnakes
+    snakes = game_state['board']['snakes']
+    # array of battlesnake objects
+    # https://docs.battlesnake.com/api/objects/battlesnake
+
+    op_body_before_tail = []
+    op_head_next_positions = []
+    if (len(snakes) > 1):
+      print('snakes detected')
+      
+    for snake in snakes:
+      if (snake["name"] != snake_name):
+        op_body_before_tail += snake['body'][:-1]
+        snake_head_x = snake["head"]["x"]
+        snake_head_y = snake["head"]["y"]
+        op_head_next_positions += [{'x': snake_head_x+1, 'y':snake_head_y}] #go right
+        op_head_next_positions += [{'x': snake_head_x-1, 'y':snake_head_y}] #go left
+        op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y+1}] #go up
+        op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y-1}] #go down
+
+    my_head_left = {"x": my_head["x"]-1, "y": my_head["y"]}
+    my_head_right = {"x": my_head["x"]+1, "y": my_head["y"]}
+    my_head_down = {"x": my_head["x"], "y": my_head["y"]-1}
+    my_head_up = {"x": my_head["x"], "y": my_head["y"]+1}
+
+    op_next_positions = op_body_before_tail + op_head_next_positions
   
-    # TODO: Step 3 - Prevent your Battlesnake from colliding with other Battlesnakes
-    # opponents = game_state['board']['snakes']
+    if (my_head_left in op_next_positions):
+      is_move_safe["left"] = False
+      print("avoid opponent")
+      
+    elif (my_head_right in op_next_positions):
+      is_move_safe["right"] = False
+      print("avoid opponent")
+    
+    elif (my_head_down in op_next_positions):
+      is_move_safe["down"] = False
+      print("avoid opponent")
+    elif (my_head_up in op_next_positions):
+      is_move_safe["up"] = False
+      print("avoid opponent")
+      
+    """
+    # if head[x] - 1 is in body, don't turn left
+    head_temp = my_head.copy()
+    head_temp["x"] -= 1
+    if (head_temp in op_body_before_tail):
+      is_move_safe["left"] = False
+      print('op')
+    # if head[x] + 1 is in body, don't turn right
+    head_temp = my_head.copy()
+    head_temp["x"] += 1
+    if (head_temp in op_body_before_tail):
+      is_move_safe["right"] = False
+      print('op')
+    # if head[y] - 1 is in body, don't turn down
+    head_temp = my_head.copy()
+    head_temp["y"] -= 1
+    if (head_temp in op_body_before_tail):
+      is_move_safe["down"] = False
+      print('op')
+    # if head[y] + 1 is in body, don't turn up
+    head_temp = my_head.copy()
+    head_temp["y"] += 1
+    if (head_temp in op_body_before_tail):
+      is_move_safe["up"] = False
+      print('op')
+    
+    # if head[x] + 1 is in op's next moves, don't turn right
+    head_temp = my_head.copy()
+    head_temp["x"] -= 1
+    if (head_temp in op_head):
+      is_move_safe["left"] = False
+      print('op head')
+    # if head[x] + 1 is in op's next moves, don't turn right
+    head_temp = my_head.copy()
+    head_temp["x"] += 1
+    if (head_temp in op_head):
+      is_move_safe["right"] = False
+      print('op head')
+    # if head[y] - 1 is in op's next moves, don't turn down
+    head_temp = my_head.copy()
+    head_temp["y"] -= 1
+    if (head_temp in op_head):
+      is_move_safe["down"] = False
+      print('op head')
+    # if head[y] + 1 is in op's next moves, don't turn up
+    head_temp = my_head.copy()
+    head_temp["y"] += 1
+    if (head_temp in op_head):
+      is_move_safe["up"] = False
+      print('op head') 
+    """
 
     # Are there any safe moves left?
     safe_moves = []
+
     for move, isSafe in is_move_safe.items():
         if isSafe:
             safe_moves.append(move)
