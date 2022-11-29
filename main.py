@@ -7,14 +7,211 @@ useful links:
 
 '''
 
-import random
-import typing
-import numpy as np
-import math
 import pandas as pd
+import numpy as np
+from statistics import mean
+import typing
+from typing import List
+from typing import Dict
+import copy
+import math
+import random
 
 
-snake_name = "Slytherin" # source: https://play.battlesnake.com/u/ericpien/#battlesnakes
+class Snake:
+    def __init__(self,snake_json: Dict):       
+        self.id = snake_json['id']
+        self.name = snake_json['name']
+        self.health = snake_json['health']
+        self.body = snake_json['body']
+        self.latency = snake_json['latency']
+        self.head = snake_json['head']
+        self.length = snake_json['length']
+        self.shout = snake_json['shout']
+        self.squad = snake_json['squad']
+        self.customizations = snake_json['customizations']
+
+    def move(self, foods: List[Dict], move: str) -> 'Snake':
+        x = copy.deepcopy(self)
+        new_body = []
+        if move == 'up':
+            new_body = [{'x': self.head['x'], 'y': self.head['y']+1}] + self.body
+        elif move == 'down':
+            new_body = [{'x': self.head['x'], 'y': self.head['y']-1}] + self.body
+        elif move == 'right':
+            new_body = [{'x': self.head['x']+1, 'y': self.head['y']}] + self.body
+        elif move == 'left':
+            new_body = [{'x': self.head['x']-1, 'y': self.head['y']}] + self.body
+
+        if new_body[0] in foods:
+            x.body = new_body
+            x.head = new_body[0]
+        else:
+            x.body = new_body[:-1]
+            x.head = new_body[0]
+
+        return x
+
+    def get_snake(self) -> Dict:
+        json =  {
+            'id':self.id,
+            'name':self.name,
+            'health':self.health,
+            'body':self.body,
+            'latency': self.latency,
+            'head': self.head,
+            'length': self.length,
+            'shout': self.shout,
+            'squad': self.squad,
+            'customizations': self.customizations
+            }
+        return json
+
+class Board:
+    def __init__(self,board_json: Dict):
+        self.height = board_json['height']
+        self.width = board_json['width']
+        self.food = board_json['food']
+        self.hazards = board_json['hazards']
+        self.snakes = board_json['snakes']
+
+    def permute_ours(self, my_snake: Snake, safe_moves: List) -> List['Board']:
+        new_boards = []
+        my_index = next((index for (index, d) in enumerate(self.snakes) if d["id"] == my_snake.id), None)
+
+        for m in safe_moves:
+            nboard = copy.deepcopy(self)
+            new_snake = my_snake.move(foods = self.food, move = m)
+            nboard.snakes[my_index] = new_snake.get_snake()
+            nboard.food = [f for f in nboard.food if f != new_snake.head]
+            new_boards += [nboard]
+
+        return new_boards
+
+    def permute_theirs(self, my_snake: Snake) -> List['Board']:
+        new_snakes = [[Snake(s) for s in self.snakes if s['id'] == my_snake.id]]
+        new_boards = []
+
+        # Create new snakes
+        for sn in self.snakes:
+            if sn['id'] == my_snake.id:
+                pass
+            else: 
+                new_snakes_tmp = []
+                for m in ['up','down','left','right']:
+                    new_snake = [Snake(sn).move(foods = self.food, move = m)]
+                    msnakes = [s+new_snake for s in new_snakes]
+                    new_snakes_tmp += msnakes
+                new_snakes = new_snakes_tmp
+        
+        # create new boards using the new snakes
+        for los in new_snakes:
+            new_boards += [self.filter_snakes_to_board(los)]
+
+        return new_boards
+
+    
+
+    def filter_snakes_to_board(self, snakes: List["Snake"]) -> List["Board"]:
+        
+        # filter snakes if its head is out of bounds / in hazard / in itself
+        # self.height / self.width / self.hazards / s.body[1:]
+        filtered_snakes = [sn for sn in snakes if ((sn.head not in self.hazards) and 
+                                                    (sn.head['x'] >= 0) and
+                                                    (sn.head['x'] <= (self.width - 1)) and
+                                                    (sn.head['y'] >= 0) and
+                                                    (sn.head['y'] <= (self.height - 1)) and
+                                                    (sn.head not in sn.body[1:]))]
+
+        # remove food if eaten
+        # self.food
+        snake_heads = [sn.head for sn in snakes]
+        filtered_food = [f for f in self.food if f not in snake_heads]
+       
+        # remove snakes that have collided with others
+        non_collided_snakes = [sn.get_snake() for sn in filtered_snakes if sn.head not in lolox_to_lox([s.body for s in filtered_snakes if s != sn])]
+        
+        # create new board with the snakes and foods
+        nboard = copy.deepcopy(self)
+        nboard.food = filtered_food
+
+        nboard.snakes = non_collided_snakes
+        return nboard
+    
+
+    def score(self, my_snake: Snake) -> float:
+        death_aversion = 0
+        hunger_aversion = 0
+        aggression = 0      
+        
+        local_ids = [s['id'] for s in self.snakes]
+        other_snakes = [s for s in self.snakes if s['id'] != my_snake.id]
+
+        if my_snake.get_snake()['id'] not in local_ids:
+            death_aversion = -10000
+            factors = [death_aversion, hunger_aversion, aggression]
+            return mean(factors)
+        
+        else:
+            local_my_snake = [s for s in self.snakes if s['id'] == my_snake.id][0]
+            hunger_aversion = (local_my_snake['health'] - 100)*100    
+            aggression = len(other_snakes)*-100
+            factors = [death_aversion, hunger_aversion, aggression]
+            return mean(factors)
+
+    def score_n_steps(self, my_snake: Snake, moves: List, counter: float, n: float) -> float:
+        counter += 1
+        #initiate dictionary
+
+        scores = []
+
+        for move in moves:
+            # Create all boards based on our move + their moves
+            our_move_boards = self.permute_ours(my_snake,[move])
+            all_possible_next_boards = []
+            for b in our_move_boards:
+                all_possible_next_boards += b.permute_theirs(my_snake)
+
+            # Creating unique list out of boards
+            unique_boards = [] 
+            unique_snakes = []
+
+            for b in all_possible_next_boards:
+                if b.snakes not in unique_snakes:
+                    unique_boards += [b]
+                    unique_snakes += [b.snakes]
+
+            ## Score test
+            for b in unique_boards:
+                local_score = b.score(my_snake)
+                scores += [local_score]
+                
+                if counter < n:
+                    try:
+                        scores += [b.score_n_steps(my_snake, ['up','down','right','left'],counter,n)]
+                    except:
+                        pass
+
+        return mean(scores)
+    
+    def score_moves(self, my_snake: Snake, moves: List, counter: float, n: float) -> Dict:
+        scored_moves = {}
+        for move in moves:
+            scored_moves[move] = self.score_n_steps(my_snake, [move], counter, n)
+
+        return scored_moves
+      
+    def build_np(self) -> np.ndarray:
+        # Use the enum values to populate a 2d array
+        pass
+
+class BoardTile():
+    pass
+
+class BoardTree:
+    def __init__(init_state: Board):
+    # Build the tree from our initial state by permuting
+        pass        
 
 # info is called when you create your Battlesnake on play.battlesnake.com
 # and controls your Battlesnake's appearance
@@ -25,8 +222,8 @@ def info() -> typing.Dict:
         "apiversion": "1",
         "author": "ericpien",  # Battlesnake Username
         "color": "#FA4616",    # Choose color
-        #"head": "do-sammy",  # Choose head
-        "head": "tiger-king",  # Choose head
+        "head": "do-sammy",  # Choose head
+       # "head": "tiger-king",  # Choose head
         "tail": "nr-booster",  # Choose tail
     }
 
@@ -42,7 +239,8 @@ def end(game_state: typing.Dict):
 # Valid moves are "up", "down", "left", or "right"
 # See https://docs.battlesnake.com/api/example-move for available data
 def move(game_state: typing.Dict) -> typing.Dict:
-
+    print('\nTURN {}'.format(game_state['turn']))
+  
     is_move_safe = {
       "up": True, 
       "down": True, 
@@ -109,33 +307,29 @@ def move(game_state: typing.Dict) -> typing.Dict:
     op_body_before_tail = []
     op_head_next_positions = []
   
-    for snake in snakes:
-      if (snake["name"] != snake_name):
-        op_body_before_tail += snake['body'][:-1]
-        snake_head_x = snake["head"]["x"]
-        snake_head_y = snake["head"]["y"]
-        op_head_next_positions += [{'x': snake_head_x+1, 'y':snake_head_y}] #go right
-        op_head_next_positions += [{'x': snake_head_x-1, 'y':snake_head_y}] #go left
-        op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y+1}] #go up
-        op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y-1}] #go down
+    #for snake in snakes:
+    #  if (snake["name"] != snake_name):
+    #    op_body_before_tail += snake['body'][:-1]
+    #    snake_head_x = snake["head"]["x"]
+    #    snake_head_y = snake["head"]["y"]
+    #    op_head_next_positions += [{'x': snake_head_x+1, 'y':snake_head_y}] #go right
+    #    op_head_next_positions += [{'x': snake_head_x-1, 'y':snake_head_y}] #go left
+    #    op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y+1}] #go up
+    #    op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y-1}] #go down
 
-    op_next_positions = op_body_before_tail + op_head_next_positions
+    # op_next_positions = op_body_before_tail + op_head_next_positions
   
-    if (my_head_left in op_next_positions):
-      is_move_safe["left"] = False
-      print("avoid opponent")
-      
-    if (my_head_right in op_next_positions):
-      is_move_safe["right"] = False
-      print("avoid opponent")
-    
-    if (my_head_down in op_next_positions):
-      is_move_safe["down"] = False
-      print("avoid opponent")
-      
-    if (my_head_up in op_next_positions):
-      is_move_safe["up"] = False
-      print("avoid opponent")
+    #if (my_head_left in op_next_positions):
+    #  is_move_safe["left"] = False
+    #  
+    #if (my_head_right in op_next_positions):
+    #  is_move_safe["right"] = False
+    # 
+    #if (my_head_down in op_next_positions):
+    #  is_move_safe["down"] = False
+    #  
+    #if (my_head_up in op_next_positions):
+    #  is_move_safe["up"] = False
 
       
     # Prevent Battlesnake from colliding with hazards
@@ -143,19 +337,15 @@ def move(game_state: typing.Dict) -> typing.Dict:
   
     if (my_head_left in hazards):
       is_move_safe["left"] = False
-      print("avoid hazard")
       
     if (my_head_right in hazards):
       is_move_safe["right"] = False
-      print("avoid hazard")
     
     if (my_head_down in hazards):
       is_move_safe["down"] = False
-      print("avoid hazard")
       
     if (my_head_up in hazards):
       is_move_safe["up"] = False
-      print("avoid hazard")
 
     
     # Are there any safe moves left?
@@ -169,79 +359,29 @@ def move(game_state: typing.Dict) -> typing.Dict:
       safe_moves = ['up','down','left','right']
       
     
+    sn = Snake(game_state["you"])
+    bd = Board(game_state['board'])
+    score_dict = bd.score_moves(sn, safe_moves, 0, 2)
 
+    summary = pd.DataFrame(list(score_dict.items()),columns=['moves','scores'])
   
-    moves = []
-    scores = []
-    summary = pd.DataFrame()
-    
-    for move in safe_moves:
-        step_2_lob = []
-        step_3_lob = []      
-      
-        for b in next_lob(game_state['board'], [], 0, move):
-            my_snake = [snake for snake in b['snakes'] if snake['name'] == snake_name]
-            
-            if len(my_snake) > 0:
-              lohazard = b['hazards']
-              lobody = sum([sn['body'][:-1] for sn in b['snakes']],[])
-              lowall = []
-              for h in range(board_height+1):
-                  lowall.append({"x":-1, "y":h})
-                  lowall.append({"x":board_width, "y":h})
-              
-              for w in range(board_width+1):
-                  lowall.append({"x":w, "y":-1})
-                  lowall.append({"x":w, "y":board_height})
-              
-              lodanger = (lohazard + lobody + lowall)
-
-              next_pos = my_snake[0]["head"]
-              next_moves = [{'move': 'left', 'pos': {"x": next_pos["x"]-1, "y": next_pos["y"]}},
-                  {'move': 'right', 'pos': {"x": next_pos["x"]+1, "y": next_pos["y"]}},
-                  {'move': 'down', 'pos': {"x": next_pos["x"], "y": next_pos["y"]-1}},
-                  {'move': 'up', 'pos': {"x": next_pos["x"], "y": next_pos["y"]+1}}]
-
-              safe_next_moves = [m['move'] for m in next_moves if m['pos'] not in lodanger]
-              unsafe_next_moves = [m['move'] for m in next_moves if m['pos'] in lodanger]
-
-              if len(safe_next_moves) == 0:
-                safe_next_moves = unsafe_next_moves
-              
-              for move2 in safe_next_moves:
-                step_2_lob += next_lob(b, [], 0 , move2) 
-                
-
-              
-        score = [score_b(b) for b in step_2_lob]
-    
-        if len(score) > 0:
-            moves.append(move)
-            scores.append(mean(score))
-        
-    summary["moves"] = moves
-    summary["scores"] = scores
-
-    print(summary)
-  
-
     if len(summary) == 0:
-      print("No safe moves detected! Going rogue")
+      print("No safe moves detected! Going rogue!!")
       next_move = random.choice(safe_moves)
-      
       return {"move": next_move}
-      
+
+    
     max_score = max(summary['scores'])
     best_next_moves = []
     for i in range(len(summary)):
       if summary['scores'][i] == max_score:
           best_next_moves.append(summary['moves'][i])
-    
-    safe_moves = best_next_moves
-    print('available moves are: {}'.format(safe_moves))
-      
 
+    
   
+    safe_moves = best_next_moves
+    print(summary)
+    print('available moves are: {}'.format(safe_moves))  
   
   # Move towards food
     food = game_state['board']['food'] #array of (x,y) [{"x":, "y": }]
@@ -266,168 +406,17 @@ def move(game_state: typing.Dict) -> typing.Dict:
     print(f"MOVE {game_state['turn']}: {next_move}")
     return {"move": next_move}
 
-
-
-from statistics import mean
-
-def score_b(board):
-    my_snake = [snake for snake in board['snakes'] if snake['name'] == snake_name]
-    los_excl_self = board['snakes'].copy()
-    
-  
-    #death_aversion: am i alive
-    death_aversion = 0
-    hunger_aversion = 0
-    agression = 0
-
-    if len(my_snake) == 0:
-      death_aversion = -1000
-    elif len(my_snake) == 1:
-      hunger_aversion = 1000 * my_snake[0]['length']
-      los_excl_self.remove(my_snake[0])
-      agression = -1000 * len(los_excl_self)
-    
-    #distance to food: the closer the better
-    distance = 0
-    
-
-    factors = [death_aversion, distance, agression, hunger_aversion]
-    score = mean(factors)
-    return score
   
 def euclidean_distance(coord1, coord2):
     n = math.sqrt((coord1["x"]-coord2["x"])**2 + (coord1["y"]-coord2["y"])**2)
     return n
 
-def next_lob(board, lolos, counter, branch):
-    # board: board object
-    # lolos: running list of snakes  #listof (listof snakes)
-    # counter: counter for each recursive loop
-    # branch: indicates my snake's moves. one of: 'left' 'right' 'up' 'down'
-    
-    # PULL ITEMS OUT OF THE BOARD OBJECT
-    snakes = board["snakes"]             # listof [sn, sn, ...] - list of snakes on the board
-    snake = snakes[counter:counter+1][0] # [{"id": , ... }.{"id": , ...}] - snake which is going to be making the turn
-    hazards = board["hazards"]           # listof [({'x':_,'y':_}),...] - list of coordinates of hazards
-    board_height = board["height"]       # Natural
-    board_width = board["width"]         # Natural
-    foods = board["food"]                # listof [({'x':_,'y':_}),...] - list of coordinates of foods
-    
-    # INITIATE MOVE
-    # lolop_all4 is listof (listof {x,y})
-    # lolop_all4 represents all of the next possible moves for a given snake
-    # if the snake is my snake, it will simply generate the specific safe move as represented by branch
-    lolop_all4 = []
+def lolox_to_lox(lolox: List[List]) -> List:
+        lox = []
+        for l in lolox:
+            lox += l
+        return lox
 
-    if (snake['name'] ==  snake_name):
-        if branch == 'up':
-            lolop_all4.append([{"x": snake['head']['x'] , "y": snake['head']['y']+1}] + snake['body'][:])
-        elif branch == 'down':
-            lolop_all4.append([{"x": snake['head']['x'] , "y": snake['head']['y']-1}] + snake['body'][:])
-        elif branch == 'left':
-            lolop_all4.append([{"x": snake['head']['x']-1, "y": snake['head']['y']}] + snake['body'][:])
-        elif branch == 'right':
-            lolop_all4.append([{"x": snake['head']['x']+1, "y": snake['head']['y']}] + snake['body'][:])
-
-    else: lolop_all4 = [
-            [{"x": snake['head']['x'] , "y": snake['head']['y']+1}] + snake['body'][:],
-            [{"x": snake['head']['x'] , "y": snake['head']['y']-1}] + snake['body'][:],
-            [{"x": snake['head']['x']-1 , "y": snake['head']['y']}] + snake['body'][:],
-            [{"x": snake['head']['x']+1 , "y": snake['head']['y']}] + snake['body'][:]
-        ]
-    
-    # HAZARD / OUT OF BOUNDS / IMPLODE
-    # lolop is a listof (listof {x,y})
-    # lolop screens out any snakes that have hit a hazard or is out of bounds
-    lolop = []
-    for p in lolop_all4:
-        if (not ((p[0] in hazards) or
-            (p[0]['x'] < 0) or
-            (p[0]['x'] > (board_width - 1)) or 
-            (p[0]['y'] < 0) or
-            (p[0]['y'] > (board_height - 1)) or
-            (p[0] in p[1:]))):
-
-            lolop.append(p)
-
-    # FOOD
-    # lolop_food_adj is a listof (listof {x,y})
-    # foods_not_eaten is a listof {x,y}
-    # lolop_food_adj includes snakes adjusted for whether it ate a food or not
-    # foods_not_eaten is foods, with eaten foods removed 
-    lolop_food_adj = []
-    foods_not_eaten = foods
-    for p in lolop:
-        if p[0] in foods:
-            lolop_food_adj.append(p)
-        else:
-            lolop_food_adj.append(p[:-1])
-        
-    for f in foods:
-        for p in lolop:
-            if f in p:
-                foods_not_eaten.remove(f)
-
-    # CONVERT POSITION TO SNAKE DATA
-    # lolop_to_lolos is a listof (listof snakes)
-    # lolop_to_lolos takes lolop_food_adj and produce list of list of snakes
-    lolop_to_lolos = []
-    for pos in lolop_food_adj:
-        lolop_to_lolos.append(
-            [{
-                "id": snake['id'],
-                "name": snake['name'],
-                "health": 54,
-                "body": pos,
-                "latency": snake['latency'],
-                "head": pos[0],
-                "length": len(pos),
-                "shout": snake['shout'],
-                "squad": snake['squad'],
-                "customizations": snake['customizations']
-            }]
-        )
-
-    # APPEND NEW SNAKE TO OLD LISTOF SNAKES
-    # next_lolos is a listof (listof snake)
-    # append new snakes to old list of snakes
-    next_lolos = [] #[[sn, sn, ...], [sn, sn, ...], [sn, sn, ...]]
-
-    if len(lolos) == 0:
-        next_lolos = lolop_to_lolos
-    else:    
-        for los in lolos:                           #starting list
-            losb = []
-            for s in los:                           #each snake already processed
-                losb.append(s['body'])              #add to listof snake bodies
-                
-            for s in lolop_to_lolos:                #new snake
-                if (s[0]['head'] not in losb[0]):   #append if not collided
-                    next_lolos.append(los + s)
-
-
-    # TEST OF RECURSION
-    # basecase condition: if we have looped through every snake on the board
-    # convert the list of snakes to board representations
-    # and return the board
-    counter += 1
-    if counter == len(snakes):
-        lob = []
-        for los in next_lolos:
-            lob.append(
-                {"height": board_height,
-                "width": board_width,
-                "food": foods_not_eaten,
-                "hazards": hazards,
-                "snakes": los 
-                }
-            )
-        return lob
-
-    # Trust the natural recursion <3
-    return next_lob(board, next_lolos, counter, branch)
-  
-# Start server when `python main.py` is run
 if __name__ == "__main__":
     from server import run_server
 
