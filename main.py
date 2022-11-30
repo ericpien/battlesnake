@@ -143,55 +143,59 @@ class Board:
         death_aversion = 0
         hunger_aversion = 0
         aggression = 0      
-        
+        greed = 0
+      
         local_ids = [s['id'] for s in self.snakes]
         other_snakes = [s for s in self.snakes if s['id'] != my_snake.id]
 
         if my_snake.get_snake()['id'] not in local_ids:
-            death_aversion = -10000
-            factors = [death_aversion, hunger_aversion, aggression]
+            death_aversion = -1000
+            factors = [death_aversion, hunger_aversion, aggression,greed]
             return mean(factors)
         
         else:
             local_my_snake = [s for s in self.snakes if s['id'] == my_snake.id][0]
-            hunger_aversion = (local_my_snake['health'] - 100)*100    
+            hunger_aversion = (local_my_snake['health'] - 100)*100
             aggression = len(other_snakes)*-100
-            factors = [death_aversion, hunger_aversion, aggression]
+            greed = local_my_snake['length']*100
+            factors = [death_aversion, hunger_aversion, aggression, greed]
             return mean(factors)
 
     def score_n_steps(self, my_snake: Snake, moves: List, counter: float, n: float) -> float:
         counter += 1
-        #initiate dictionary
-
         scores = []
 
         for move in moves:
-            # Create all boards based on our move + their moves
-            our_move_boards = self.permute_ours(my_snake,[move])
-            all_possible_next_boards = []
-            for b in our_move_boards:
-                all_possible_next_boards += b.permute_theirs(my_snake)
-
-            # Creating unique list out of boards
-            unique_boards = [] 
-            unique_snakes = []
-
-            for b in all_possible_next_boards:
-                if b.snakes not in unique_snakes:
-                    unique_boards += [b]
-                    unique_snakes += [b.snakes]
-
-            ## Score test
-            for b in unique_boards:
-                local_score = b.score(my_snake)
-                scores += [local_score]
+            try:
+                local_my_snake = [Snake(s) for s in self.snakes if s['id'] == my_snake.id][0]
                 
-                if counter < n:
-                    try:
-                        scores += [b.score_n_steps(my_snake, ['up','down','right','left'],counter,n)]
-                    except:
-                        pass
+                # Create all boards based on our move + their moves
+                our_move_boards = self.permute_ours(local_my_snake,[move])
+                  
+                all_possible_next_boards = []
+                for b in our_move_boards:
+                    all_possible_next_boards += b.permute_theirs(local_my_snake)
 
+                # Creating unique list out of boards
+                unique_boards = [] 
+                unique_snakes = []
+
+                for b in all_possible_next_boards:
+                    if b.snakes not in unique_snakes:
+                        unique_boards += [b]
+                        unique_snakes += [b.snakes]
+                
+                ## Score test
+                for b in unique_boards:
+                    local_score = b.score(local_my_snake)
+                    scores += [local_score]
+
+                    if counter < n:
+                        scores += [b.score_n_steps(local_my_snake,['up','down','right','left'],counter,n)]
+
+            except:
+                return -1000
+        
         return mean(scores)
     
     def score_moves(self, my_snake: Snake, moves: List, counter: float, n: float) -> Dict:
@@ -205,7 +209,7 @@ class Board:
         # Use the enum values to populate a 2d array
         pass
 
-class BoardTile():
+class BoardTile:
     pass
 
 class BoardTree:
@@ -306,31 +310,6 @@ def move(game_state: typing.Dict) -> typing.Dict:
 
     op_body_before_tail = []
     op_head_next_positions = []
-  
-    #for snake in snakes:
-    #  if (snake["name"] != snake_name):
-    #    op_body_before_tail += snake['body'][:-1]
-    #    snake_head_x = snake["head"]["x"]
-    #    snake_head_y = snake["head"]["y"]
-    #    op_head_next_positions += [{'x': snake_head_x+1, 'y':snake_head_y}] #go right
-    #    op_head_next_positions += [{'x': snake_head_x-1, 'y':snake_head_y}] #go left
-    #    op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y+1}] #go up
-    #    op_head_next_positions += [{'x': snake_head_x, 'y':snake_head_y-1}] #go down
-
-    # op_next_positions = op_body_before_tail + op_head_next_positions
-  
-    #if (my_head_left in op_next_positions):
-    #  is_move_safe["left"] = False
-    #  
-    #if (my_head_right in op_next_positions):
-    #  is_move_safe["right"] = False
-    # 
-    #if (my_head_down in op_next_positions):
-    #  is_move_safe["down"] = False
-    #  
-    #if (my_head_up in op_next_positions):
-    #  is_move_safe["up"] = False
-
       
     # Prevent Battlesnake from colliding with hazards
     hazards = game_state['board']['hazards'] #array of positions [({"x":, "y": }), ...]
