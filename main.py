@@ -18,6 +18,53 @@ import math
 import random
 
 
+# Represent X and Y coordinates and perform operations on them
+class Coordinate:
+
+  # Coordinate has these constants for quick operations
+  LEFT  = {'x': -1, 'y':  0}
+  RIGHT = {'x':  1, 'y':  0}
+  UP    = {'x':  0, 'y':  1}
+  DOWN  = {'x':  0, 'y': -1}
+
+  def __init__(self, xy: Dict):
+    # Initialize coordinate using a dictionary {'x': int, 'y': int}
+    self.x = xy['x']
+    self.y = xy['y']
+
+  def __add__(self, coord2: "Coordinate") -> "Coordinate":
+    # Add current coordinate to coord2 and return new coordinate
+    return Coordinate(self.x + coord2.x, self.y + coord2.y)
+  
+  def __str__(self):
+    # Print Coordinate (x,y)
+    return "('x': {}, 'y' {})".format(self.x,self.y)
+  
+  def move_left(self) -> "Coordinate":
+    # Move coordinate point one LEFT
+    return Coordinate({'x': self.x + self.LEFT['x'], 'y':self.y + self.LEFT['y']})
+  
+  def move_right(self) -> "Coordinate":
+    # Move coordinate point one RIGHT
+    return Coordinate({'x': self.x + self.RIGHT['x'], 'y':self.y + self.RIGHT['y']})
+
+  def move_up(self) -> "Coordinate":
+    # Move coordinate point one UP
+    return Coordinate({'x': self.x + self.UP['x'], 'y':self.y + self.UP['y']})
+
+  def move_down(self) -> "Coordinate":
+    # Move coordinate point one DOWN
+    return Coordinate({'x': self.x + self.DOWN['x'], 'y':self.y + self.DOWN['y']})
+
+  def euclidean_distance(coord1:Dict, coord2: Dict) -> float:
+    # Return the euclidean distance from current coordinate to coord2
+    n = math.sqrt((coord1['x']-coord2['x'])**2 + (coord1['y']-coord2['y'])**2)
+    return n
+
+  
+    
+  
+# Snake is any snake on the board
 class Snake:
     def __init__(self,snake_json: Dict):       
         self.id = snake_json['id']
@@ -34,14 +81,15 @@ class Snake:
     def move(self, foods: List[Dict], move: str) -> 'Snake':
         x = copy.deepcopy(self)
         new_body = []
+        
         if move == 'up':
-            new_body = [{'x': self.head['x'], 'y': self.head['y']+1}] + self.body
+            new_body = [Coordinate(self.head).move_up().__dict__] + self.body
         elif move == 'down':
-            new_body = [{'x': self.head['x'], 'y': self.head['y']-1}] + self.body
+            new_body = [Coordinate(self.head).move_down().__dict__] + self.body
         elif move == 'right':
-            new_body = [{'x': self.head['x']+1, 'y': self.head['y']}] + self.body
+            new_body = [Coordinate(self.head).move_right().__dict__] + self.body
         elif move == 'left':
-            new_body = [{'x': self.head['x']-1, 'y': self.head['y']}] + self.body
+            new_body = [Coordinate(self.head).move_left().__dict__] + self.body
 
         if new_body[0] in foods:
             x.body = new_body
@@ -66,156 +114,189 @@ class Snake:
             'customizations': self.customizations
             }
         return json
+      
+    def get_snake(self) -> Dict:
+        json =  {
+            'id':self.id,
+            'name':self.name,
+            'health':self.health,
+            'body':self.body,
+            'latency': self.latency,
+            'head': self.head,
+            'length': self.length,
+            'shout': self.shout,
+            'squad': self.squad,
+            'customizations': self.customizations
+            }
+        return json
+
+    def basic_safe_moves(self, moves: Dict) -> Dict:
+      # remove implosion
+      
+      # check out of bounds
+      
+      pass
 
 class Board:
-    def __init__(self,board_json: Dict):
-        self.height = board_json['height']
-        self.width = board_json['width']
-        self.food = board_json['food']
-        self.hazards = board_json['hazards']
-        self.snakes = board_json['snakes']
+  def __init__(self,board_json: Dict):
+    self.height = board_json['height']
+    self.width = board_json['width']
+    self.food = board_json['food']
+    self.hazards = board_json['hazards']
+    self.snakes = board_json['snakes']
+  
+  def permute_ours(self, my_snake: Snake, safe_moves: List) -> List['Board']:
+    new_boards = []
+    my_index = next((index for (index, d) in enumerate(self.snakes) if d["id"] == my_snake.id), None)
 
-    def permute_ours(self, my_snake: Snake, safe_moves: List) -> List['Board']:
-        new_boards = []
-        my_index = next((index for (index, d) in enumerate(self.snakes) if d["id"] == my_snake.id), None)
-
-        for m in safe_moves:
-            nboard = copy.deepcopy(self)
-            new_snake = my_snake.move(foods = self.food, move = m)
-            nboard.snakes[my_index] = new_snake.get_snake()
-            nboard.food = [f for f in nboard.food if f != new_snake.head]
-            new_boards += [nboard]
-
-        return new_boards
-
-    def permute_theirs(self, my_snake: Snake) -> List['Board']:
-        new_snakes = [[Snake(s) for s in self.snakes if s['id'] == my_snake.id]]
-        new_boards = []
-
-        # Create new snakes
-        for sn in self.snakes:
-            if sn['id'] == my_snake.id:
-                pass
-            else: 
-                new_snakes_tmp = []
-                for m in ['up','down','left','right']:
-                    new_snake = [Snake(sn).move(foods = self.food, move = m)]
-                    msnakes = [s+new_snake for s in new_snakes]
-                    new_snakes_tmp += msnakes
-                new_snakes = new_snakes_tmp
-        
-        # create new boards using the new snakes
-        for los in new_snakes:
-            new_boards += [self.filter_snakes_to_board(los)]
-
-        return new_boards
-
-    
-
-    def filter_snakes_to_board(self, snakes: List["Snake"]) -> List["Board"]:
-        
-        # filter snakes if its head is out of bounds / in hazard / in itself
-        # self.height / self.width / self.hazards / s.body[1:]
-        filtered_snakes = [sn for sn in snakes if ((sn.head not in self.hazards) and 
-                                                    (sn.head['x'] >= 0) and
-                                                    (sn.head['x'] <= (self.width - 1)) and
-                                                    (sn.head['y'] >= 0) and
-                                                    (sn.head['y'] <= (self.height - 1)) and
-                                                    (sn.head not in sn.body[1:]))]
-
-        # remove food if eaten
-        # self.food
-        snake_heads = [sn.head for sn in snakes]
-        filtered_food = [f for f in self.food if f not in snake_heads]
-       
-        # remove snakes that have collided with others
-        non_collided_snakes = [sn.get_snake() for sn in filtered_snakes if sn.head not in lolox_to_lox([s.body for s in filtered_snakes if s != sn])]
-        
-        # create new board with the snakes and foods
+    for m in safe_moves:
         nboard = copy.deepcopy(self)
-        nboard.food = filtered_food
+        new_snake = my_snake.move(foods = self.food, move = m)
+        nboard.snakes[my_index] = new_snake.get_snake()
+        nboard.food = [f for f in nboard.food if f != new_snake.head]
+        new_boards += [nboard]
 
-        nboard.snakes = non_collided_snakes
-        return nboard
+    return new_boards
+
+  def permute_theirs(self, my_snake: Snake) -> List['Board']:
+    new_snakes = [[Snake(s) for s in self.snakes if s['id'] == my_snake.id]]
+    new_boards = []
+
+    # Create new snakes
+    for sn in self.snakes:
+        if sn['id'] == my_snake.id:
+            pass
+        else: 
+            new_snakes_tmp = []
+            for m in ['up','down','left','right']:
+                new_snake = [Snake(sn).move(foods = self.food, move = m)]
+                msnakes = [s+new_snake for s in new_snakes]
+                new_snakes_tmp += msnakes
+            new_snakes = new_snakes_tmp
     
+    # create new boards using the new snakes
+    for los in new_snakes:
+        new_boards += [self.filter_snakes_to_board(los)]
 
-    def score(self, my_snake: Snake) -> float:
-        death_aversion = 0
-        hunger_aversion = 0
-        aggression = 0      
-        greed = 0
-      
-        local_ids = [s['id'] for s in self.snakes]
-        other_snakes = [s for s in self.snakes if s['id'] != my_snake.id]
+    return new_boards
+  
+  def flatten(lolox: List[List]) -> List:
+    lox = []
+    for l in lolox:
+        lox += l
+    return lox
 
-        if my_snake.get_snake()['id'] not in local_ids:
-            death_aversion = -1000
-            factors = [death_aversion, hunger_aversion, aggression,greed]
-            return mean(factors)
-        
-        else:
-            local_my_snake = [s for s in self.snakes if s['id'] == my_snake.id][0]
-            hunger_aversion = (local_my_snake['health'] - 100)*100
-            aggression = len(other_snakes)*-100
-            greed = local_my_snake['length']*100
-            factors = [death_aversion, hunger_aversion, aggression, greed]
-            return mean(factors)
-
-    def score_n_steps(self, my_snake: Snake, moves: List, counter: float, n: float) -> float:
-        counter += 1
-        scores = []
-
-        for move in moves:
-            try:
-                local_my_snake = [Snake(s) for s in self.snakes if s['id'] == my_snake.id][0]
-                
-                # Create all boards based on our move + their moves
-                our_move_boards = self.permute_ours(local_my_snake,[move])
-                  
-                all_possible_next_boards = []
-                for b in our_move_boards:
-                    all_possible_next_boards += b.permute_theirs(local_my_snake)
-
-                # Creating unique list out of boards
-                unique_boards = [] 
-                unique_snakes = []
-
-                for b in all_possible_next_boards:
-                    if b.snakes not in unique_snakes:
-                        unique_boards += [b]
-                        unique_snakes += [b.snakes]
-                
-                ## Score test
-                for b in unique_boards:
-                    local_score = b.score(local_my_snake)
-                    scores += [local_score]
-
-                    if counter < n:
-                        scores += [b.score_n_steps(local_my_snake,['up','down','right','left'],counter,n)]
-
-            except:
-                return -1000
-        
-        return mean(scores)
+  def filter_snakes_to_board(self, snakes: List["Snake"]) -> List["Board"]:
     
-    def score_moves(self, my_snake: Snake, moves: List, counter: float, n: float) -> Dict:
-        scored_moves = {}
-        for move in moves:
-            scored_moves[move] = self.score_n_steps(my_snake, [move], counter, n)
+    # filter snakes if its head is out of bounds / in hazard / in itself
+    # self.height / self.width / self.hazards / s.body[1:]
+    filtered_snakes = [sn for sn in snakes if ((sn.head not in self.hazards) and 
+                                                (sn.head['x'] >= 0) and
+                                                (sn.head['x'] <= (self.width - 1)) and
+                                                (sn.head['y'] >= 0) and
+                                                (sn.head['y'] <= (self.height - 1)) and
+                                                (sn.head not in sn.body[1:]))]
 
-        return scored_moves
-      
-    def build_np(self) -> np.ndarray:
-        # Use the enum values to populate a 2d array
-        pass
+    # remove food if eaten
+    # self.food
+    snake_heads = [sn.head for sn in snakes]
+    filtered_food = [f for f in self.food if f not in snake_heads]
+   
+    # remove snakes that have collided with others
+    non_collided_snakes = [sn.get_snake() for sn in filtered_snakes if sn.head not in Board.flatten([s.body for s in filtered_snakes if s != sn])]
+    
+    # create new board with the snakes and foods
+    nboard = copy.deepcopy(self)
+    nboard.food = filtered_food
 
-class BoardTile:
+    nboard.snakes = non_collided_snakes
+    return nboard
+  
+  
+  def score(self, my_snake: Snake) -> float:
+    death_aversion = 0
+    hunger_aversion = 0
+    aggression = 0      
+    
+    local_ids = [s['id'] for s in self.snakes]
+    other_snakes = [s for s in self.snakes if s['id'] != my_snake.id]
+
+    if my_snake.get_snake()['id'] not in local_ids:
+        death_aversion = -10000
+        factors = [death_aversion, hunger_aversion, aggression]
+        return mean(factors)
+    
+    else:
+        local_my_snake = [s for s in self.snakes if s['id'] == my_snake.id][0]
+        hunger_aversion = (local_my_snake['health'] - 100)*100    
+        aggression = len(other_snakes)*-100
+        factors = [death_aversion, hunger_aversion, aggression]
+        return mean(factors)
+  
+  def score_n_steps(self, my_snake: Snake, moves: List, counter: float, n: float) -> float:
+    counter += 1
+    #initiate dictionary
+    print('depth: {}_____'.format(counter))
+    scores = []
+
+    for move in moves:
+        try:
+            local_my_snake = [Snake(s) for s in self.snakes if s['id'] == my_snake.id][0]
+            # Create all boards based on our move + their moves
+            our_move_boards = self.permute_ours(local_my_snake,[move])
+            #print('move: {} | # our moves: {}'.format(move,len(our_move_boards)))
+            all_possible_next_boards = []
+            for b in our_move_boards:
+                all_possible_next_boards += b.permute_theirs(local_my_snake)
+
+            # Creating unique list out of boards
+            unique_boards = [] 
+            unique_snakes = []
+
+            for b in all_possible_next_boards:
+                if b.snakes not in unique_snakes:
+                    unique_boards += [b]
+                    unique_snakes += [b.snakes]
+
+            #print('move: {} | # their moves: {}'.format(move,len(unique_boards)))
+            
+            ## Score test
+            for b in unique_boards:
+                local_score = b.score(local_my_snake)
+                scores += [local_score]
+                #print('scores: {}'.format(scores))
+                print('depth: {} | move: {} | scores: {}'.format(counter,move,scores))
+
+                if counter < n:
+                    scores += [b.score_n_steps(local_my_snake,['up','down','right','left'],counter,n)]
+                    
+                print('depth: {} | move: {} | scores: {}'.format(counter,move,scores))
+
+        except:
+            return -10000
+    
+    return mean(scores)
+  
+  def score_moves(self, my_snake: Snake, moves: List, counter: float, n: float) -> Dict:
+    scored_moves = {}
+    for move in moves:
+        scored_moves[move] = self.score_n_steps(my_snake, [move], counter, n)
+
+    return scored_moves
+  
+  def build_np(self) -> np.ndarray:
+    # Use the enum values to populate a 2d array
     pass
 
+class BoardTile():
+  pass
+
 class BoardTree:
-    def __init__(init_state: Board):
-    # Build the tree from our initial state by permuting
-        pass        
+  def __init__(init_state: Board):
+  # Build the tree from our initial state by permuting
+    pass
+
+
 
 # info is called when you create your Battlesnake on play.battlesnake.com
 # and controls your Battlesnake's appearance
@@ -252,6 +333,12 @@ def move(game_state: typing.Dict) -> typing.Dict:
       "right": True
     }
 
+    sn = Snake(game_state["you"])
+    bd = Board(game_state['board'])
+    
+    #is_move_safe = bd.basic_safe_moves()
+  
+  
     # Prevent Battlesnake from moving backwards
     my_head = game_state["you"]["body"][0]  # Coordinates of your head
     my_neck = game_state["you"]["body"][1]  # Coordinates of your "neck"
@@ -327,6 +414,7 @@ def move(game_state: typing.Dict) -> typing.Dict:
       is_move_safe["up"] = False
 
     
+
     # Are there any safe moves left?
     safe_moves = []
 
@@ -338,8 +426,8 @@ def move(game_state: typing.Dict) -> typing.Dict:
       safe_moves = ['up','down','left','right']
       
     
-    sn = Snake(game_state["you"])
-    bd = Board(game_state['board'])
+    #sn = Snake(game_state["you"])
+    #bd = Board(game_state['board'])
     score_dict = bd.score_moves(sn, safe_moves, 0, 2)
 
     summary = pd.DataFrame(list(score_dict.items()),columns=['moves','scores'])
@@ -355,7 +443,6 @@ def move(game_state: typing.Dict) -> typing.Dict:
     for i in range(len(summary)):
       if summary['scores'][i] == max_score:
           best_next_moves.append(summary['moves'][i])
-
     
   
     safe_moves = best_next_moves
@@ -368,14 +455,14 @@ def move(game_state: typing.Dict) -> typing.Dict:
     if len(food) == 0:
       next_move = random.choice(safe_moves)
     else:
-      food_distances = [euclidean_distance(f,my_head) for f in food]
+      food_distances = [Coordinate.euclidean_distance(f,my_head) for f in food]
       nearest_food_integer = food_distances.index(min(food_distances))
       nearest_food = food[nearest_food_integer]
 
-      distances = {"left": euclidean_distance(my_head_left, nearest_food),
-                  "right":  euclidean_distance(my_head_right, nearest_food),
-                  "up":  euclidean_distance(my_head_up, nearest_food),
-                  "down": euclidean_distance(my_head_down, nearest_food)}
+      distances = {"left": Coordinate.euclidean_distance(my_head_left,  nearest_food),
+                  "right": Coordinate.euclidean_distance(my_head_right, nearest_food),
+                  "up"   : Coordinate.euclidean_distance(my_head_up,    nearest_food),
+                  "down" : Coordinate.euclidean_distance(my_head_down,  nearest_food)}
       
       safe_move_distances = [distances[m] for m in safe_moves]
       best_move_integer = safe_move_distances.index(min(safe_move_distances))
@@ -384,17 +471,6 @@ def move(game_state: typing.Dict) -> typing.Dict:
   
     print(f"MOVE {game_state['turn']}: {next_move}")
     return {"move": next_move}
-
-  
-def euclidean_distance(coord1, coord2):
-    n = math.sqrt((coord1["x"]-coord2["x"])**2 + (coord1["y"]-coord2["y"])**2)
-    return n
-
-def lolox_to_lox(lolox: List[List]) -> List:
-        lox = []
-        for l in lolox:
-            lox += l
-        return lox
 
 if __name__ == "__main__":
     from server import run_server
